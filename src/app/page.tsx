@@ -33,6 +33,24 @@ export default function Home() {
 
   const socketRef = useRef<Socket | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const wsMessagesRef = useRef<HTMLDivElement>(null);
+  const sseMessagesRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll function
+  const scrollToBottom = (elementRef: React.RefObject<HTMLDivElement | null>) => {
+    if (elementRef.current) {
+      elementRef.current.scrollTop = elementRef.current.scrollHeight;
+    }
+  };
+
+  // Auto-scroll when messages change
+  useEffect(() => {
+    scrollToBottom(wsMessagesRef);
+  }, [wsMessages]);
+
+  useEffect(() => {
+    scrollToBottom(sseMessagesRef);
+  }, [sseMessages]);
 
   // WebSocket (Socket.IO) Connection
   const connectWebSocket = () => {
@@ -255,7 +273,7 @@ export default function Home() {
               </button>
             </div>
 
-            <div className="h-64 overflow-y-auto bg-gray-50 p-3 rounded border">
+            <div ref={wsMessagesRef} className="h-64 overflow-y-auto bg-gray-50 p-3 rounded border">
               <h3 className="font-medium mb-2 text-gray-800">Messages (Bidirectional):</h3>
               {wsMessages.length === 0 ? (
                 <div className="text-gray-600 text-sm">No messages yet...</div>
@@ -333,7 +351,7 @@ export default function Home() {
               </button>
             </div>
 
-            <div className="h-64 overflow-y-auto bg-gray-50 p-3 rounded border">
+            <div ref={sseMessagesRef} className="h-64 overflow-y-auto bg-gray-50 p-3 rounded border">
               <h3 className="font-medium mb-2 text-gray-800">Messages (Server → Client only):</h3>
               {sseMessages.length === 0 ? (
                 <div className="text-gray-600 text-sm">No messages yet...</div>
