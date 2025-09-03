@@ -1,36 +1,164 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# WebSocket vs Server-Sent Events (SSE) Comparison Demo
 
-## Getting Started
+Aplikasi Next.js yang mendemonstrasikan perbandingan antara WebSocket dan Server-Sent Events (SSE) untuk komunikasi real-time.
 
-First, run the development server:
+## 🚀 Fitur
 
-```bash
+- **Perbandingan Real-time**: Melihat perbedaan performa antara WebSocket dan SSE secara side-by-side
+- **Monitoring Statistik**: Melacak jumlah pesan, latensi rata-rata, dan waktu koneksi
+- **UI Interaktif**: Kontrol koneksi dengan tombol connect, disconnect, dan reset
+- **Visualisasi Status**: Indikator status koneksi real-time dengan warna dan animasi
+- **Tabel Perbandingan**: Dokumentasi lengkap perbedaan fitur antara kedua teknologi
+
+## 🔧 Teknologi yang Digunakan
+
+- **Next.js 15** - Framework React dengan App Router
+- **TypeScript** - Type safety dan development experience yang lebih baik
+- **Tailwind CSS** - Styling dan responsive design
+- **WebSocket (ws)** - Library WebSocket untuk Node.js
+- **Server-Sent Events** - Native browser API untuk streaming data
+
+## 🛠️ Cara Menjalankan
+
+### Prerequisites
+
+- Node.js (versi 18 atau lebih baru)
+- npm atau yarn
+
+### Installation
+
+1. Clone repository:
+\`\`\`bash
+git clone <repository-url>
+cd sse-vs-websocket
+\`\`\`
+
+2. Install dependencies:
+\`\`\`bash
+npm install
+\`\`\`
+
+3. Jalankan aplikasi (Next.js dan WebSocket server secara bersamaan):
+\`\`\`bash
+npm run dev:all
+\`\`\`
+
+Atau jalankan secara terpisah:
+
+**Terminal 1** - Next.js development server:
+\`\`\`bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+\`\`\`
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**Terminal 2** - WebSocket server:
+\`\`\`bash
+npm run ws-server
+\`\`\`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+4. Buka browser dan akses [http://localhost:3000](http://localhost:3000)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 📊 Cara Menggunakan Demo
 
-## Learn More
+1. **WebSocket Section (Kiri)**:
+   - Klik tombol "Connect" untuk koneksi ke WebSocket server (port 3001)
+   - Lihat pesan real-time dan statistik performa
+   - Gunakan tombol "Disconnect" dan "Reset" untuk kontrol koneksi
 
-To learn more about Next.js, take a look at the following resources:
+2. **SSE Section (Kanan)**:
+   - Klik tombol "Connect" untuk memulai SSE stream
+   - Monitor pesan dan statistik performa
+   - Gunakan kontrol yang sama untuk manajemen koneksi
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+3. **Perbandingan**:
+   - Amati perbedaan latensi dan waktu koneksi
+   - Lihat tabel perbandingan fitur di bawah
+   - Perhatikan perbedaan perilaku reconnection
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🔍 Perbedaan Utama
 
-## Deploy on Vercel
+### WebSocket
+- ✅ **Bidirectional**: Komunikasi dua arah
+- ✅ **Low Latency**: Overhead minimal setelah handshake
+- ✅ **Binary Support**: Mendukung data binary
+- ❌ **Manual Reconnection**: Perlu implementasi manual
+- ❌ **Kompleksitas**: Lebih kompleks untuk setup
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Server-Sent Events (SSE)
+- ✅ **Automatic Reconnection**: Reconnection otomatis
+- ✅ **Simplicity**: Implementasi lebih sederhana
+- ✅ **HTTP Based**: Menggunakan protokol HTTP standar
+- ❌ **Unidirectional**: Hanya server ke client
+- ❌ **Text Only**: Hanya mendukung data text
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 📁 Struktur Proyek
+
+\`\`\`
+src/
+├── app/
+│   ├── api/
+│   │   └── sse/
+│   │       └── route.ts          # SSE endpoint
+│   ├── globals.css               # Global styles
+│   ├── layout.tsx               # Root layout
+│   └── page.tsx                 # Main demo page
+├── docs/                        # Documentation
+│   ├── websocket-flow.md        # WebSocket server flow documentation
+│   └── sse-flow.md              # SSE implementation documentation
+└── websocket-server.ts          # WebSocket server
+\`\`\`
+
+## 📚 Dokumentasi Teknis
+
+Untuk pemahaman yang lebih mendalam tentang implementasi:
+
+- **[WebSocket Flow Documentation](docs/websocket-flow.md)** - Penjelasan lengkap alur kerja WebSocket server, arsitektur, dan integrasi dengan Next.js
+- **[SSE Flow Documentation](docs/sse-flow.md)** - Detail implementasi Server-Sent Events, protokol, dan perbandingan dengan WebSocket
+
+## 🎯 Use Cases
+
+### Kapan Menggunakan WebSocket:
+- Aplikasi chat real-time
+- Game online multiplayer
+- Collaborative editing (Google Docs style)
+- Trading platforms
+- Aplikasi yang memerlukan komunikasi dua arah
+
+### Kapan Menggunakan SSE:
+- Live feeds (Twitter, news)
+- Notifikasi real-time
+- Dashboard monitoring
+- Progress updates
+- Live sports scores
+- Server status monitoring
+
+## 🚀 Deployment
+
+Untuk production deployment:
+
+1. Build aplikasi:
+\`\`\`bash
+npm run build
+\`\`\`
+
+2. Start production server:
+\`\`\`bash
+npm start
+\`\`\`
+
+3. Deploy WebSocket server terpisah atau gunakan platform yang mendukung WebSocket.
+
+## 📝 Catatan Pengembangan
+
+- WebSocket server berjalan di port 3001
+- SSE endpoint tersedia di `/api/sse`
+- Pesan dikirim setiap 2-3 detik untuk demonstrasi
+- Latensi dihitung berdasarkan timestamp pengiriman
+- Automatic reconnection hanya tersedia untuk SSE
+
+## 🤝 Kontribusi
+
+Silakan buat issue atau pull request untuk perbaikan dan penambahan fitur.
+
+## 📄 License
+
+MIT License - lihat file LICENSE untuk detail lengkap.
