@@ -1,64 +1,54 @@
 export async function GET() {
   const encoder = new TextEncoder();
+  let messageCounter = 0;
 
+  // Create readable stream for SSE
   const customReadable = new ReadableStream({
     start(controller) {
-      // Send initial message
-      const initialMessage = {
-        message: "SSE connection established",
-        sentAt: Date.now()
+      // Send welcome message
+      const welcomeMessage = {
+        id: ++messageCounter,
+        text: "SSE connection established - Server to client only",
+        timestamp: new Date().toISOString(),
+        type: 'welcome'
       };
-      controller.enqueue(encoder.encode(`data: ${JSON.stringify(initialMessage)}\n\n`));
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify(welcomeMessage)}\n\n`));
 
-      // Send periodic messages
+      // Send periodic messages every 4 seconds
       const interval = setInterval(() => {
         const message = {
-          message: `SSE Message ${Math.floor(Math.random() * 1000)}`,
-          sentAt: Date.now()
+          id: ++messageCounter,
+          text: `SSE message #${messageCounter} - One-way streaming`,
+          timestamp: new Date().toISOString(),
+          type: 'data'
         };
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(message)}\n\n`));
-      }, 2000);
+        
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(message)}\n\n`));
+        } catch (error) {
+          console.log('SSE client disconnected');
+          clearInterval(interval);
+        }
+      }, 4000);
 
-      // Send random status updates
-      const statusInterval = setInterval(() => {
-        const statuses = [
-          "Processing data...",
-          "Server load: Normal",
-          "Database sync completed",
-          "Cache refreshed",
-          "Monitoring active",
-          "System health: Good"
-        ];
-        const message = {
-          message: statuses[Math.floor(Math.random() * statuses.length)],
-          sentAt: Date.now()
-        };
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(message)}\n\n`));
-      }, 5000);
-
-      // Clean up on close
-      const cleanup = () => {
-        clearInterval(interval);
-        clearInterval(statusInterval);
-      };
-
-      // Note: In a real application, you'd want to handle client disconnection
-      // This is a simplified example
+      // Auto cleanup after 10 minutes
       setTimeout(() => {
-        cleanup();
-        controller.close();
-      }, 300000); // Close after 5 minutes
+        clearInterval(interval);
+        try {
+          controller.close();
+        } catch (error) {
+          // Client already disconnected
+        }
+      }, 600000);
     },
   });
 
+  // Return response with proper SSE headers
   return new Response(customReadable, {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET',
-      'Access-Control-Allow-Headers': 'Cache-Control',
     },
   });
 }

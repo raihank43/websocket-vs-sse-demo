@@ -1,18 +1,19 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { io, Socket } from 'socket.io-client';
 
 interface Message {
   id: number;
-  content: string;
+  text: string;
   timestamp: string;
+  type: string;
   source: 'websocket' | 'sse';
 }
 
 interface Stats {
   messagesReceived: number;
   connectionTime: number;
-  averageLatency: number;
   status: 'connecting' | 'connected' | 'disconnected' | 'error';
 }
 
@@ -22,68 +23,67 @@ export default function Home() {
   const [wsStats, setWsStats] = useState<Stats>({
     messagesReceived: 0,
     connectionTime: 0,
-    averageLatency: 0,
     status: 'disconnected'
   });
   const [sseStats, setSseStats] = useState<Stats>({
     messagesReceived: 0,
     connectionTime: 0,
-    averageLatency: 0,
     status: 'disconnected'
   });
 
-  const wsRef = useRef<WebSocket | null>(null);
+  const socketRef = useRef<Socket | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
-  const wsLatencyTracker = useRef<number[]>([]);
-  const sseLatencyTracker = useRef<number[]>([]);
 
-  // WebSocket Connection
+  // WebSocket (Socket.IO) Connection
   const connectWebSocket = () => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    if (socketRef.current?.connected) return;
 
     const startTime = Date.now();
     setWsStats(prev => ({ ...prev, status: 'connecting' }));
 
-    wsRef.current = new WebSocket('ws://localhost:3001');
+    // Connect to Socket.IO server
+    socketRef.current = io('http://localhost:3001');
 
-    wsRef.current.onopen = () => {
+    socketRef.current.on('connect', () => {
       const connectionTime = Date.now() - startTime;
       setWsStats(prev => ({ 
         ...prev, 
         status: 'connected', 
         connectionTime 
       }));
-    };
+      console.log('✅ Socket.IO connected');
+    });
 
-    wsRef.current.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      const latency = Date.now() - data.sentAt;
-      
-      wsLatencyTracker.current.push(latency);
-      const avgLatency = wsLatencyTracker.current.reduce((a, b) => a + b, 0) / wsLatencyTracker.current.length;
-
+    socketRef.current.on('message', (data) => {
       const message: Message = {
-        id: Date.now(),
-        content: data.message,
-        timestamp: new Date().toLocaleTimeString(),
+        ...data,
         source: 'websocket'
       };
 
       setWsMessages(prev => [...prev.slice(-9), message]);
       setWsStats(prev => ({
         ...prev,
-        messagesReceived: prev.messagesReceived + 1,
-        averageLatency: Math.round(avgLatency)
+        messagesReceived: prev.messagesReceived + 1
       }));
-    };
+    });
 
-    wsRef.current.onclose = () => {
+    socketRef.current.on('disconnect', () => {
       setWsStats(prev => ({ ...prev, status: 'disconnected' }));
-    };
+      console.log('❌ Socket.IO disconnected');
+    });
 
-    wsRef.current.onerror = () => {
+    socketRef.current.on('connect_error', () => {
       setWsStats(prev => ({ ...prev, status: 'error' }));
-    };
+      console.log('🔥 Socket.IO connection error');
+    });
+  };
+
+  // Send message to WebSocket (demonstrating bidirectional)
+  const sendWebSocketMessage = () => {
+    if (socketRef.current?.connected) {
+      const message = `Hello from client at ${new Date().toLocaleTimeString()}`;
+      socketRef.current.emit('client-message', { text: message });
+    }
   };
 
   // SSE Connection
@@ -102,38 +102,32 @@ export default function Home() {
         status: 'connected', 
         connectionTime 
       }));
+      console.log('✅ SSE connected');
     };
 
     eventSourceRef.current.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      const latency = Date.now() - data.sentAt;
-      
-      sseLatencyTracker.current.push(latency);
-      const avgLatency = sseLatencyTracker.current.reduce((a, b) => a + b, 0) / sseLatencyTracker.current.length;
-
       const message: Message = {
-        id: Date.now(),
-        content: data.message,
-        timestamp: new Date().toLocaleTimeString(),
+        ...data,
         source: 'sse'
       };
 
       setSseMessages(prev => [...prev.slice(-9), message]);
       setSseStats(prev => ({
         ...prev,
-        messagesReceived: prev.messagesReceived + 1,
-        averageLatency: Math.round(avgLatency)
+        messagesReceived: prev.messagesReceived + 1
       }));
     };
 
     eventSourceRef.current.onerror = () => {
       setSseStats(prev => ({ ...prev, status: 'error' }));
+      console.log('🔥 SSE connection error');
     };
   };
 
   // Disconnect functions
   const disconnectWebSocket = () => {
-    wsRef.current?.close();
+    socketRef.current?.disconnect();
     setWsStats(prev => ({ ...prev, status: 'disconnected' }));
   };
 
@@ -146,11 +140,9 @@ export default function Home() {
   const resetWS = () => {
     disconnectWebSocket();
     setWsMessages([]);
-    wsLatencyTracker.current = [];
     setWsStats({
       messagesReceived: 0,
       connectionTime: 0,
-      averageLatency: 0,
       status: 'disconnected'
     });
   };
@@ -158,11 +150,9 @@ export default function Home() {
   const resetSSE = () => {
     disconnectSSE();
     setSseMessages([]);
-    sseLatencyTracker.current = [];
     setSseStats({
       messagesReceived: 0,
       connectionTime: 0,
-      averageLatency: 0,
       status: 'disconnected'
     });
   };
@@ -170,17 +160,17 @@ export default function Home() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      wsRef.current?.close();
+      socketRef.current?.disconnect();
       eventSourceRef.current?.close();
     };
   }, []);
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'connected': return 'text-green-500';
-      case 'connecting': return 'text-yellow-500';
-      case 'error': return 'text-red-500';
-      default: return 'text-gray-500';
+      case 'connected': return 'text-green-600';
+      case 'connecting': return 'text-yellow-600';
+      case 'error': return 'text-red-600';
+      default: return 'text-gray-600';
     }
   };
 
@@ -200,7 +190,7 @@ export default function Home() {
           WebSocket vs Server-Sent Events
         </h1>
         <p className="text-center text-gray-600 mb-8">
-          Real-time Communication Comparison Demo
+          Simple Comparison Demo - Socket.IO vs SSE
         </p>
 
         <div className="grid lg:grid-cols-2 gap-8">
@@ -209,7 +199,7 @@ export default function Home() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-2xl font-semibold text-blue-600 flex items-center">
                 <div className={`w-3 h-3 rounded-full mr-3 ${getStatusDot(wsStats.status)}`}></div>
-                WebSocket
+                WebSocket (Socket.IO)
               </h2>
               <span className={`font-medium ${getStatusColor(wsStats.status)}`}>
                 {wsStats.status.toUpperCase()}
@@ -218,20 +208,20 @@ export default function Home() {
 
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div className="bg-blue-50 p-3 rounded">
-                <div className="text-sm text-gray-600">Messages</div>
-                <div className="text-lg font-semibold">{wsStats.messagesReceived}</div>
+                <div className="text-sm text-gray-700">Messages Received</div>
+                <div className="text-lg font-semibold text-gray-800">{wsStats.messagesReceived}</div>
               </div>
               <div className="bg-blue-50 p-3 rounded">
-                <div className="text-sm text-gray-600">Avg Latency</div>
-                <div className="text-lg font-semibold">{wsStats.averageLatency}ms</div>
+                <div className="text-sm text-gray-700">Connection Time</div>
+                <div className="text-lg font-semibold text-gray-800">{wsStats.connectionTime}ms</div>
               </div>
               <div className="bg-blue-50 p-3 rounded">
-                <div className="text-sm text-gray-600">Connection Time</div>
-                <div className="text-lg font-semibold">{wsStats.connectionTime}ms</div>
+                <div className="text-sm text-gray-700">Communication</div>
+                <div className="text-lg font-semibold text-gray-800">Bidirectional</div>
               </div>
               <div className="bg-blue-50 p-3 rounded">
-                <div className="text-sm text-gray-600">Protocol</div>
-                <div className="text-lg font-semibold">Bidirectional</div>
+                <div className="text-sm text-gray-700">Protocol</div>
+                <div className="text-lg font-semibold text-gray-800">Socket.IO</div>
               </div>
             </div>
 
@@ -242,6 +232,13 @@ export default function Home() {
                 className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Connect
+              </button>
+              <button
+                onClick={sendWebSocketMessage}
+                disabled={wsStats.status !== 'connected'}
+                className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Send Message
               </button>
               <button
                 onClick={disconnectWebSocket}
@@ -259,14 +256,16 @@ export default function Home() {
             </div>
 
             <div className="h-64 overflow-y-auto bg-gray-50 p-3 rounded border">
-              <h3 className="font-medium mb-2">Messages:</h3>
+              <h3 className="font-medium mb-2 text-gray-800">Messages (Bidirectional):</h3>
               {wsMessages.length === 0 ? (
-                <div className="text-gray-500 text-sm">No messages yet...</div>
+                <div className="text-gray-600 text-sm">No messages yet...</div>
               ) : (
                 wsMessages.map((message) => (
-                  <div key={message.id} className="mb-1 text-sm">
-                    <span className="text-gray-500">[{message.timestamp}]</span>
-                    <span className="ml-2">{message.content}</span>
+                  <div key={`ws-${message.id}`} className="mb-2 p-2 bg-white rounded border-l-4 border-blue-400 shadow-sm">
+                    <div className="text-xs text-gray-600 mb-1 font-medium">
+                      [{new Date(message.timestamp).toLocaleTimeString()}] - {message.type}
+                    </div>
+                    <div className="text-sm text-gray-800">{message.text}</div>
                   </div>
                 ))
               )}
@@ -287,20 +286,20 @@ export default function Home() {
 
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div className="bg-green-50 p-3 rounded">
-                <div className="text-sm text-gray-600">Messages</div>
-                <div className="text-lg font-semibold">{sseStats.messagesReceived}</div>
+                <div className="text-sm text-gray-700">Messages Received</div>
+                <div className="text-lg font-semibold text-gray-800">{sseStats.messagesReceived}</div>
               </div>
               <div className="bg-green-50 p-3 rounded">
-                <div className="text-sm text-gray-600">Avg Latency</div>
-                <div className="text-lg font-semibold">{sseStats.averageLatency}ms</div>
+                <div className="text-sm text-gray-700">Connection Time</div>
+                <div className="text-lg font-semibold text-gray-800">{sseStats.connectionTime}ms</div>
               </div>
               <div className="bg-green-50 p-3 rounded">
-                <div className="text-sm text-gray-600">Connection Time</div>
-                <div className="text-lg font-semibold">{sseStats.connectionTime}ms</div>
+                <div className="text-sm text-gray-700">Communication</div>
+                <div className="text-lg font-semibold text-gray-800">Unidirectional</div>
               </div>
               <div className="bg-green-50 p-3 rounded">
-                <div className="text-sm text-gray-600">Protocol</div>
-                <div className="text-lg font-semibold">Unidirectional</div>
+                <div className="text-sm text-gray-700">Protocol</div>
+                <div className="text-lg font-semibold text-gray-800">HTTP Stream</div>
               </div>
             </div>
 
@@ -311,6 +310,13 @@ export default function Home() {
                 className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Connect
+              </button>
+              <button
+                disabled={true}
+                className="bg-gray-300 text-gray-500 px-4 py-2 rounded cursor-not-allowed"
+                title="SSE is unidirectional - server to client only"
+              >
+                Send Message (N/A)
               </button>
               <button
                 onClick={disconnectSSE}
@@ -328,14 +334,16 @@ export default function Home() {
             </div>
 
             <div className="h-64 overflow-y-auto bg-gray-50 p-3 rounded border">
-              <h3 className="font-medium mb-2">Messages:</h3>
+              <h3 className="font-medium mb-2 text-gray-800">Messages (Server → Client only):</h3>
               {sseMessages.length === 0 ? (
-                <div className="text-gray-500 text-sm">No messages yet...</div>
+                <div className="text-gray-600 text-sm">No messages yet...</div>
               ) : (
                 sseMessages.map((message) => (
-                  <div key={message.id} className="mb-1 text-sm">
-                    <span className="text-gray-500">[{message.timestamp}]</span>
-                    <span className="ml-2">{message.content}</span>
+                  <div key={`sse-${message.id}`} className="mb-2 p-2 bg-white rounded border-l-4 border-green-400 shadow-sm">
+                    <div className="text-xs text-gray-600 mb-1 font-medium">
+                      [{new Date(message.timestamp).toLocaleTimeString()}] - {message.type}
+                    </div>
+                    <div className="text-sm text-gray-800">{message.text}</div>
                   </div>
                 ))
               )}
@@ -343,56 +351,60 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Comparison Table */}
+        {/* Simple Comparison Table */}
         <div className="mt-8 bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-2xl font-semibold mb-4 text-gray-800">Feature Comparison</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left p-3 font-semibold">Feature</th>
-                  <th className="text-left p-3 font-semibold text-blue-600">WebSocket</th>
-                  <th className="text-left p-3 font-semibold text-green-600">Server-Sent Events</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Communication</td>
-                  <td className="p-3">Bidirectional</td>
-                  <td className="p-3">Unidirectional (Server → Client)</td>
-                </tr>
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Protocol</td>
-                  <td className="p-3">Custom over TCP</td>
-                  <td className="p-3">HTTP/HTTPS</td>
-                </tr>
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Overhead</td>
-                  <td className="p-3">Lower (binary frames)</td>
-                  <td className="p-3">Higher (HTTP headers)</td>
-                </tr>
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Reconnection</td>
-                  <td className="p-3">Manual implementation</td>
-                  <td className="p-3">Automatic</td>
-                </tr>
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Browser Support</td>
-                  <td className="p-3">Excellent (modern browsers)</td>
-                  <td className="p-3">Excellent (IE10+)</td>
-                </tr>
-                <tr className="border-b">
-                  <td className="p-3 font-medium">Use Cases</td>
-                  <td className="p-3">Chat apps, gaming, collaborative editing</td>
-                  <td className="p-3">Live feeds, notifications, monitoring</td>
-                </tr>
-                <tr>
-                  <td className="p-3 font-medium">Complexity</td>
-                  <td className="p-3">Higher (connection management)</td>
-                  <td className="p-3">Lower (simpler implementation)</td>
-                </tr>
-              </tbody>
-            </table>
+          <h2 className="text-2xl font-semibold mb-4 text-gray-800">Quick Comparison</h2>
+          <div className="grid md:grid-cols-2 gap-6">
+            <div>
+              <h3 className="text-lg font-semibold text-blue-600 mb-3">WebSocket (Socket.IO)</h3>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-center">
+                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                  <span className="text-gray-700">Bidirectional communication</span>
+                </li>
+                <li className="flex items-center">
+                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                  <span className="text-gray-700">Real-time messaging</span>
+                </li>
+                <li className="flex items-center">
+                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                  <span className="text-gray-700">Lower latency</span>
+                </li>
+                <li className="flex items-center">
+                  <span className="w-2 h-2 bg-yellow-500 rounded-full mr-2"></span>
+                  <span className="text-gray-700">More complex setup</span>
+                </li>
+                <li className="flex items-center">
+                  <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
+                  <span className="text-gray-700">Manual reconnection handling</span>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-green-600 mb-3">Server-Sent Events</h3>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-center">
+                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                  <span className="text-gray-700">Simple HTTP-based</span>
+                </li>
+                <li className="flex items-center">
+                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                  <span className="text-gray-700">Automatic reconnection</span>
+                </li>
+                <li className="flex items-center">
+                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                  <span className="text-gray-700">Easy to implement</span>
+                </li>
+                <li className="flex items-center">
+                  <span className="w-2 h-2 bg-yellow-500 rounded-full mr-2"></span>
+                  <span className="text-gray-700">Server to client only</span>
+                </li>
+                <li className="flex items-center">
+                  <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
+                  <span className="text-gray-700">Higher overhead</span>
+                </li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>

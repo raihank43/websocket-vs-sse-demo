@@ -1,77 +1,83 @@
-import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
+import { Server } from 'socket.io';
 
-const server = createServer();
-const wss = new WebSocketServer({ server });
+// Create HTTP server
+const httpServer = createServer();
 
-wss.on('connection', function connection(ws) {
-  console.log('New WebSocket client connected');
+// Create Socket.IO server
+const io = new Server(httpServer, {
+  cors: {
+    origin: "http://localhost:3000",
+    methods: ["GET", "POST"]
+  }
+});
 
-  // Send welcome message
-  const welcomeMessage = {
-    message: "WebSocket connection established",
-    sentAt: Date.now()
-  };
-  ws.send(JSON.stringify(welcomeMessage));
+// Simple message counter
+let messageCounter = 0;
 
-  // Send periodic messages
-  const interval = setInterval(() => {
-    if (ws.readyState === ws.OPEN) {
-      const message = {
-        message: `WebSocket Message ${Math.floor(Math.random() * 1000)}`,
-        sentAt: Date.now()
-      };
-      ws.send(JSON.stringify(message));
-    }
-  }, 2000);
+// Global broadcast interval (so all clients get the same message)
+const globalBroadcastInterval = setInterval(() => {
+  io.emit('message', {
+    id: ++messageCounter,
+    text: `Global broadcast #${messageCounter} - All clients receive this`,
+    timestamp: new Date().toISOString(),
+    type: 'global-broadcast'
+  });
+}, 5000); // Every 5 seconds
 
-  // Send random status updates
-  const statusInterval = setInterval(() => {
-    if (ws.readyState === ws.OPEN) {
-      const statuses = [
-        "Real-time sync active",
-        "WebSocket health: Excellent", 
-        "Low latency confirmed",
-        "Bidirectional ready",
-        "Connection stable",
-        "Data stream flowing"
-      ];
-      const message = {
-        message: statuses[Math.floor(Math.random() * statuses.length)],
-        sentAt: Date.now()
-      };
-      ws.send(JSON.stringify(message));
-    }
-  }, 3000);
-
-  ws.on('close', function close() {
-    console.log('WebSocket client disconnected');
-    clearInterval(interval);
-    clearInterval(statusInterval);
+// Socket.IO connection handling
+io.on('connection', (socket) => {
+  console.log(`✅ Client connected: ${socket.id}`);
+  
+  // Send welcome message to this specific client
+  socket.emit('message', {
+    id: ++messageCounter,
+    text: `Welcome! You are connected with ID: ${socket.id.substring(0, 8)}`,
+    timestamp: new Date().toISOString(),
+    type: 'welcome'
   });
 
-  ws.on('error', function error(err) {
-    console.error('WebSocket error:', err);
-    clearInterval(interval);
-    clearInterval(statusInterval);
-  });
+  // Send individual messages to this client every 4 seconds
+  const individualInterval = setInterval(() => {
+    socket.emit('message', {
+      id: ++messageCounter,
+      text: `Personal message for ${socket.id.substring(0, 8)} - #${messageCounter}`,
+      timestamp: new Date().toISOString(),
+      type: 'personal'
+    });
+  }, 4000);
 
-  // Handle incoming messages (demonstrating bidirectional capability)
-  ws.on('message', function message(data) {
-    console.log('Received:', data.toString());
+  // Handle messages from client (bidirectional demo)
+  socket.on('client-message', (data) => {
+    console.log(`📨 Received from client: ${data.text}`);
     
-    // Echo back with timestamp
-    const response = {
-      message: `Echo: ${data.toString()}`,
-      sentAt: Date.now()
-    };
-    ws.send(JSON.stringify(response));
+    // Broadcast message to ALL connected clients (including sender)
+    io.emit('message', {
+      id: ++messageCounter,
+      text: `[Broadcast] ${data.text}`,
+      timestamp: new Date().toISOString(),
+      type: 'broadcast'
+    });
+    
+    // Also send echo back to sender
+    socket.emit('message', {
+      id: ++messageCounter,
+      text: `Echo: ${data.text}`,
+      timestamp: new Date().toISOString(),
+      type: 'echo'
+    });
+  });
+
+  // Handle disconnect
+  socket.on('disconnect', (reason) => {
+    console.log(`❌ Client disconnected: ${socket.id} (${reason})`);
+    clearInterval(individualInterval);
   });
 });
 
-const port = 3001;
-server.listen(port, () => {
-  console.log(`WebSocket server listening on port ${port}`);
+const PORT = 3001;
+httpServer.listen(PORT, () => {
+  console.log(`🚀 Socket.IO server running on port ${PORT}`);
 });
 
 export {};
